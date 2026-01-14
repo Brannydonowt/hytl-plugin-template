@@ -5,6 +5,11 @@ import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.command.system.basecommands.CommandBase;
 
+import com.hypixel.hytale.server.core.inventory.ItemStack;
+
+import com.hypixel.hytale.server.core.entity.entities.Player;
+import dev.branny.hytale.utilities.ItemUtilities;
+
 import javax.annotation.Nonnull;
 
 /**
@@ -25,5 +30,11 @@ public class ExampleCommand extends CommandBase {
     @Override
     protected void executeSync(@Nonnull CommandContext ctx) {
         ctx.sendMessage(Message.raw("Hello from the " + pluginName + " v" + pluginVersion + " plugin!"));
+    
+        if (ctx.isPlayer()){
+            Player player = (Player) ctx.sender();
+
+            ItemUtilities.giveItemToHotbar(player,  new ItemStack("Ingredient_Poop", 1));
+        }
     }
 }
