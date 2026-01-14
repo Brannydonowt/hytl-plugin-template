@@ -1,14 +1,14 @@
 {
-    "Group": "Example",
-    "Name": "ExamplePlugin",
+    "Group": "PrototypeMods",
+    "Name": "BrannysPrototypeMod",
     "Version": "0.0.2",
-    "Description": "An example plugin for HyTale!",
+    "Description": "A prototype Hytale plugin.",
     "Authors": [
         {
-            "Name": "It's you!"
+            "Name": "Branny"
         }
     ],
-    "Website": "example.org",
+    "Website": "",
     "ServerVersion": "*",
     "Dependencies": {
         
@@ -17,6 +17,6 @@
         
     },
     "DisabledByDefault": false,
-    "Main": "org.example.plugin.ExamplePlugin",
+    "Main": "dev.branny.hytale.BrannyPlugin",
     "IncludesAssetPack": true
 }

@@ -8,6 +8,9 @@ build/
 ### Hytale ###
 run/
 
+### Hytale Server ###
+HytaleServer.jar
+
 ### IntelliJ IDEA ###
 .idea/
 *.iws

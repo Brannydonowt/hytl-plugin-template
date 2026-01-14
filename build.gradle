@@ -19,10 +19,9 @@ javadoc {
 }
 
 // Adds the Hytale server as a build dependency, allowing you to reference and
-// compile against their code. This requires you to have Hytale installed using
-// the official launcher for now.
+// compile against their code.
 dependencies {
-    implementation(files("$hytaleHome/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
+    implementation(files("HytaleServer.jar"))
 }
 
 // Create the working directory to run the server if it does not already exist.
@@ -67,4 +66,23 @@ idea.project.settings.runConfigurations {
         }
         workingDirectory = serverRunDir.absolutePath
     }
+}
+
+// Command-line task to run the Hytale server (for use with VS Code / Cursor).
+tasks.register('runServer', JavaExec) {
+    dependsOn classes
+    mainClass = 'com.hypixel.hytale.Main'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = serverRunDir
+
+    def serverArgs = ["--allow-op", "--assets=$hytaleHome/install/$patchline/package/game/latest/Assets.zip"]
+    if (includes_pack.toBoolean()) {
+        serverArgs << "--mods=${sourceSets.main.java.srcDirs.first().parentFile.absolutePath}"
+    }
+    if (load_user_mods.toBoolean()) {
+        serverArgs << "--mods=$hytaleHome/UserData/Mods"
+    }
+    args = serverArgs
+
+    standardInput = System.in
 }
