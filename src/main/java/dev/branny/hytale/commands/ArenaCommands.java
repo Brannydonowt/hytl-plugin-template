@@ -42,21 +42,14 @@ class ArenaTeleportCommand extends CommandBase {
         Player player = (Player) ctx.sender();
         PlayerRef playerRef = player.getPlayerRef();
 
-        ctx.sendMessage(Message.raw("Transferring you to the lobby..."));
+        ctx.sendMessage(Message.raw("Transferring you to the arena..."));
 
-        WorldUtilities.transferPlayerToLobby(playerRef)
-            .thenAccept(transferredPlayer -> {
-                // Send success message after transfer completes
-                if (transferredPlayer != null) {
-                    transferredPlayer.sendMessage(Message.raw("Welcome to the lobby!"));
-                }
-            })
+        WorldUtilities.transferPlayerToWorld(playerRef, WorldUtilities.LOBBY_WORLD_NAME)
             .exceptionally(throwable -> {
-                // Handle transfer failure
                 String errorMsg = throwable.getCause() != null 
                     ? throwable.getCause().getMessage() 
                     : throwable.getMessage();
-                playerRef.sendMessage(Message.raw("Failed to transfer to lobby: " + errorMsg));
+                playerRef.sendMessage(Message.raw("Failed to transfer: " + errorMsg));
                 return null;
             });
     }
@@ -78,19 +71,14 @@ class ArenaHomeCommand extends CommandBase {
         Player player = (Player) ctx.sender();
         PlayerRef playerRef = player.getPlayerRef();
 
-        ctx.sendMessage(Message.raw("Returning to default world..."));
+        ctx.sendMessage(Message.raw("Returning to survival..."));
 
-        WorldUtilities.transferPlayerToDefault(playerRef)
-            .thenAccept(transferredPlayer -> {
-                if (transferredPlayer != null) {
-                    transferredPlayer.sendMessage(Message.raw("Welcome back!"));
-                }
-            })
+        WorldUtilities.transferPlayerToWorld(playerRef, WorldUtilities.SURVIVAL_WORLD_NAME)
             .exceptionally(throwable -> {
                 String errorMsg = throwable.getCause() != null 
                     ? throwable.getCause().getMessage() 
                     : throwable.getMessage();
-                playerRef.sendMessage(Message.raw("Failed to return home: " + errorMsg));
+                playerRef.sendMessage(Message.raw("Failed to transfer: " + errorMsg));
                 return null;
             });
     }

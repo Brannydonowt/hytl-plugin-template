@@ -16,5 +16,10 @@ public final class ItemUtilities {
         Inventory inventory = player.getInventory();
         inventory.getHotbar().addItemStack(itemStack);
     }
+
+     public static void clearInventory(@Nonnull Player player) {
+        Inventory inventory = player.getInventory();
+        inventory.clear();
+     }
 }
 

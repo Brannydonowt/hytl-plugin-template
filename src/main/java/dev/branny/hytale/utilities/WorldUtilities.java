@@ -1,8 +1,11 @@
 package dev.branny.hytale.utilities;
 
+import com.hypixel.hytale.component.ComponentAccessor;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.math.vector.Transform;
+import com.hypixel.hytale.protocol.GameMode;
 import com.hypixel.hytale.server.core.Message;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
@@ -54,21 +57,45 @@ public final class WorldUtilities {
      */
     private static final Map<String, String> WORLD_SUBTITLES = new ConcurrentHashMap<>();
 
+    /**
+     * World spawn coordinate mappings (world folder name -> spawn transform).
+     * These define where players spawn when transferred to a world.
+     */
+    private static final Map<String, Transform> WORLD_SPAWNS = new ConcurrentHashMap<>();
+
+    /**
+     * World gamemode mappings (world folder name -> gamemode).
+     * When players are transferred into a world via transferPlayerToWorld(), their gamemode is set accordingly.
+     *
+     * Default is Adventure if not registered.
+     */
+    private static final Map<String, GameMode> WORLD_GAME_MODES = new ConcurrentHashMap<>();
+
     static {
         // Register default subtitles (should match config.json Plugin.Subtitle)
         WORLD_SUBTITLES.put(LOBBY_WORLD_NAME, "Prepare for battle!");
         WORLD_SUBTITLES.put(SURVIVAL_WORLD_NAME, "Explore the wilderness");
+
+        // Register default spawn coordinates
+        WORLD_SPAWNS.put(LOBBY_WORLD_NAME, new Transform(
+            LOBBY_SPAWN_X, LOBBY_SPAWN_Y, LOBBY_SPAWN_Z, 0.0f, 0.0f, 0.0f));
+        WORLD_SPAWNS.put(SURVIVAL_WORLD_NAME, new Transform(
+            SURVIVAL_SPAWN_X, SURVIVAL_SPAWN_Y, SURVIVAL_SPAWN_Z, 0.0f, 0.0f, 0.0f));
+
+        // Register default gamemodes (Adventure = 0)
+        WORLD_GAME_MODES.put(LOBBY_WORLD_NAME, GameMode.Adventure);
+        WORLD_GAME_MODES.put(SURVIVAL_WORLD_NAME, GameMode.Adventure);
     }
 
     private WorldUtilities() {
         // Utility class; do not instantiate.
     }
 
-    // ==================== World Subtitle Management ====================
+    // ==================== World Configuration Management ====================
 
     /**
      * Registers a subtitle for a world. This subtitle is shown to players
-     * when they enter the world via transferPlayerWithTitle().
+     * when they enter the world via transferPlayerToWorld().
      *
      * @param worldName the world folder name
      * @param subtitle the subtitle text to display
@@ -85,7 +112,69 @@ public final class WorldUtilities {
      */
     @Nonnull
     public static String getWorldSubtitle(@Nonnull String worldName) {
-        return WORLD_SUBTITLES.getOrDefault(worldName.toLowerCase(), "Welcome!");
+        String subtitle = WORLD_SUBTITLES.get(worldName.toLowerCase());
+        return subtitle != null ? subtitle : "Welcome!";
+    }
+
+    /**
+     * Registers a spawn location for a world. This is where players will spawn
+     * when transferred to the world via transferPlayerToWorld().
+     *
+     * @param worldName the world folder name
+     * @param spawn the spawn transform (position and rotation)
+     */
+    public static void registerWorldSpawn(@Nonnull String worldName, @Nonnull Transform spawn) {
+        WORLD_SPAWNS.put(worldName.toLowerCase(), spawn);
+    }
+
+    /**
+     * Registers a spawn location for a world using coordinates.
+     *
+     * @param worldName the world folder name
+     * @param x spawn X coordinate
+     * @param y spawn Y coordinate
+     * @param z spawn Z coordinate
+     */
+    public static void registerWorldSpawn(@Nonnull String worldName, double x, double y, double z) {
+        WORLD_SPAWNS.put(worldName.toLowerCase(), new Transform(x, y, z, 0.0f, 0.0f, 0.0f));
+    }
+
+    /**
+     * Gets the registered spawn transform for a world.
+     *
+     * @param worldName the world folder name
+     * @return the spawn transform, or null if not registered (will use world's spawn provider)
+     */
+    @Nullable
+    public static Transform getWorldSpawn(@Nonnull String worldName) {
+        return WORLD_SPAWNS.get(worldName.toLowerCase());
+    }
+
+    // ==================== World GameMode Management ====================
+
+    /**
+     * Registers a gamemode for a world. When players are transferred into this world via
+     * transferPlayerToWorld(), their gamemode will be updated.
+     *
+     * If a world has no registered gamemode, Adventure is used by default.
+     *
+     * @param worldName the world folder name
+     * @param gameMode the gamemode to apply on entry
+     */
+    public static void registerWorldGameMode(@Nonnull String worldName, @Nonnull GameMode gameMode) {
+        WORLD_GAME_MODES.put(worldName.toLowerCase(), gameMode);
+    }
+
+    /**
+     * Gets the gamemode configured for a world.
+     *
+     * @param worldName the world folder name
+     * @return the configured gamemode, or Adventure if not registered
+     */
+    @Nonnull
+    public static GameMode getWorldGameMode(@Nonnull String worldName) {
+        GameMode mode = WORLD_GAME_MODES.get(worldName.toLowerCase());
+        return mode != null ? mode : GameMode.Adventure;
     }
 
     // ==================== World Resolution ====================
@@ -175,13 +264,15 @@ public final class WorldUtilities {
      * @param playerRef the player to transfer
      * @param worldName the name of the target world
      * @param transform the spawn transform in the target world, or null to use world spawn
+     * @param fadeInOut whether to show fade transition on client (false for immediate transfers)
      * @return a CompletableFuture that resolves to the PlayerRef after transfer
      */
     @Nonnull
     public static CompletableFuture<PlayerRef> transferPlayer(
             @Nonnull PlayerRef playerRef,
             @Nonnull String worldName,
-            @Nullable Transform transform) {
+            @Nullable Transform transform,
+            boolean fadeInOut) {
 
         // Early check: if connection is dead, don't bother
         if (!playerRef.getPacketHandler().stillActive()) {
@@ -210,9 +301,8 @@ public final class WorldUtilities {
                             
                             // Add to target world with clean client state
                             // clearWorld=true ensures client clears old world data
-                            // fadeInOut=true provides smooth visual transition
                             CompletableFuture<PlayerRef> addFuture = 
-                                targetWorld.addPlayer(playerRef, transform, true, true);
+                                targetWorld.addPlayer(playerRef, transform, true, fadeInOut);
                             
                             if (addFuture == null) {
                                 result.completeExceptionally(
@@ -234,7 +324,7 @@ public final class WorldUtilities {
                 } else {
                     // Player not in any world, add directly to target
                     CompletableFuture<PlayerRef> addFuture = 
-                        targetWorld.addPlayer(playerRef, transform, true, true);
+                        targetWorld.addPlayer(playerRef, transform, true, fadeInOut);
                     
                     if (addFuture == null) {
                         return CompletableFuture.failedFuture(
@@ -251,7 +341,34 @@ public final class WorldUtilities {
                 }
 
                 return result;
+            })
+            .thenApply(transferredPlayer -> {
+                // If we actually moved worlds, update gamemode based on the target world (default Adventure).
+                if (transferredPlayer != null) {
+                    World world = getCurrentWorld(transferredPlayer);
+                    if (world != null) {
+                        world.execute(() -> applyWorldGameMode(transferredPlayer, worldName, world));
+                    }
+                }
+                return transferredPlayer;
             });
+    }
+
+    /**
+     * Transfers a player to a different world with fade transition enabled.
+     * This is the default behavior for most transfers.
+     *
+     * @param playerRef the player to transfer
+     * @param worldName the name of the target world
+     * @param transform the spawn transform in the target world, or null to use world spawn
+     * @return a CompletableFuture that resolves to the PlayerRef after transfer
+     */
+    @Nonnull
+    public static CompletableFuture<PlayerRef> transferPlayer(
+            @Nonnull PlayerRef playerRef,
+            @Nonnull String worldName,
+            @Nullable Transform transform) {
+        return transferPlayer(playerRef, worldName, transform, true);
     }
 
     /**
@@ -303,8 +420,26 @@ public final class WorldUtilities {
 
     /**
      * Transfers a player to any world by name and shows an EventTitle upon arrival.
-     * The title displays the world's DisplayName, and the subtitle is retrieved
-     * from the registered world subtitles.
+     * Uses the registered spawn coordinates for the world (if any), otherwise falls back
+     * to the world's spawn provider.
+     *
+     * @param playerRef the player to transfer
+     * @param worldName the name of the target world folder
+     * @param fadeInOut whether to show fade transition (false for immediate transfers after join)
+     * @return a CompletableFuture that resolves to the PlayerRef after transfer
+     */
+    @Nonnull
+    public static CompletableFuture<PlayerRef> transferPlayerToWorld(
+            @Nonnull PlayerRef playerRef,
+            @Nonnull String worldName,
+            boolean fadeInOut) {
+        Transform spawn = getWorldSpawn(worldName);
+        return transferPlayerToWorld(playerRef, worldName, spawn, fadeInOut);
+    }
+
+    /**
+     * Transfers a player to any world by name and shows an EventTitle upon arrival.
+     * Uses fade transition by default.
      *
      * @param playerRef the player to transfer
      * @param worldName the name of the target world folder
@@ -314,7 +449,7 @@ public final class WorldUtilities {
     public static CompletableFuture<PlayerRef> transferPlayerToWorld(
             @Nonnull PlayerRef playerRef,
             @Nonnull String worldName) {
-        return transferPlayerToWorld(playerRef, worldName, null);
+        return transferPlayerToWorld(playerRef, worldName, true);
     }
 
     /**
@@ -323,7 +458,37 @@ public final class WorldUtilities {
      *
      * @param playerRef the player to transfer
      * @param worldName the name of the target world folder
-     * @param transform the spawn transform, or null to use world spawn
+     * @param transform the spawn transform, or null to use world's spawn provider
+     * @param fadeInOut whether to show fade transition (false for immediate transfers after join)
+     * @return a CompletableFuture that resolves to the PlayerRef after transfer
+     */
+    @Nonnull
+    public static CompletableFuture<PlayerRef> transferPlayerToWorld(
+            @Nonnull PlayerRef playerRef,
+            @Nonnull String worldName,
+            @Nullable Transform transform,
+            boolean fadeInOut) {
+
+        return transferPlayer(playerRef, worldName, transform, fadeInOut)
+            .thenApply(transferredPlayer -> {
+                if (transferredPlayer != null) {
+                    // Show entry title on the world thread
+                    World world = getCurrentWorld(transferredPlayer);
+                    if (world != null) {
+                        world.execute(() -> showWorldEntryTitle(transferredPlayer, worldName));
+                    }
+                }
+                return transferredPlayer;
+            });
+    }
+
+    /**
+     * Transfers a player to any world by name with a specific spawn transform,
+     * and shows an EventTitle upon arrival. Uses fade transition by default.
+     *
+     * @param playerRef the player to transfer
+     * @param worldName the name of the target world folder
+     * @param transform the spawn transform, or null to use world's spawn provider
      * @return a CompletableFuture that resolves to the PlayerRef after transfer
      */
     @Nonnull
@@ -331,14 +496,7 @@ public final class WorldUtilities {
             @Nonnull PlayerRef playerRef,
             @Nonnull String worldName,
             @Nullable Transform transform) {
-
-        return transferPlayer(playerRef, worldName, transform)
-            .thenApply(transferredPlayer -> {
-                if (transferredPlayer != null) {
-                    showWorldEntryTitle(transferredPlayer, worldName);
-                }
-                return transferredPlayer;
-            });
+        return transferPlayerToWorld(playerRef, worldName, transform, true);
     }
 
     /**
@@ -371,5 +529,20 @@ public final class WorldUtilities {
             Message.raw(subtitle),
             true  // isMajor = true for world entry
         );
+    }
+
+    /**
+     * Updates a player's gamemode based on the target world name.
+     * Must be called on the world's thread.
+     */
+    private static void applyWorldGameMode(@Nonnull PlayerRef playerRef, @Nonnull String worldName, @Nonnull World world) {
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            return;
+        }
+
+        GameMode desired = getWorldGameMode(worldName);
+        ComponentAccessor<EntityStore> accessor = EntityStoreUtilities.getAccessor(world);
+        Player.setGameMode(ref, desired, accessor);
     }
 }
