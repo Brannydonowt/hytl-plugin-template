@@ -4,6 +4,11 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 
+import dev.branny.hytale.commands.BrannyCommand;
+import dev.branny.hytale.commands.ExampleCommand;
+import dev.branny.hytale.commands.PoopCommand;
+import dev.branny.hytale.commands.ArenaCommands;
+
 import javax.annotation.Nonnull;
 
 /**
@@ -25,5 +30,6 @@ public class BrannyPlugin extends JavaPlugin {
         this.getCommandRegistry().registerCommand(new ExampleCommand(this.getName(), this.getManifest().getVersion().toString()));
         this.getCommandRegistry().registerCommand(new BrannyCommand(this.getName(), this.getManifest().getVersion().toString()));
         this.getCommandRegistry().registerCommand(new PoopCommand());
+        this.getCommandRegistry().registerCommand(new ArenaCommands());
     }
 }

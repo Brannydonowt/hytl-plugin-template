@@ -1,4 +1,4 @@
-package dev.branny.hytale;
+package dev.branny.hytale.commands;
 
 import com.hypixel.hytale.protocol.FormattedMessage;
 import com.hypixel.hytale.protocol.GameMode;
