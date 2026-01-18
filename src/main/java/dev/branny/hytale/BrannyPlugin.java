@@ -160,17 +160,12 @@ public class BrannyPlugin extends JavaPlugin {
         @SuppressWarnings("deprecation")
         PlayerRef playerRef = player.getPlayerRef();
         PlayerSession.getOrCreate(playerRef);
-        
-        // Initialize persistent player data
-        PlayerDataService.onPlayerConnect(playerRef);
 
         // Check if we've already handled this player's initial join
         if (!initialJoinHandled.add(playerUuid)) {
             // Already handled - this is a world change, not initial join
             return;
         }
-
-        LOGGER.atInfo().log("Player " + playerRef.getUsername() + " initial join - routing to lobby");
 
         World currentWorld = WorldTransferService.getCurrentWorld(playerRef);
         if (currentWorld == null) {
@@ -232,7 +227,6 @@ public class BrannyPlugin extends JavaPlugin {
                 Gamemode gamemode = GamemodeRegistry.get(currentGamemodeId);
                 if (gamemode != null && gamemode.hasPersistentInventory()) {
                     GamemodeInventoryManager.saveCurrentInventory(playerRef, currentGamemodeId);
-                    LOGGER.atInfo().log("Saved persistent inventory on disconnect for " + playerRef.getUsername());
                 }
             }
         }
@@ -251,7 +245,5 @@ public class BrannyPlugin extends JavaPlugin {
         
         // Clean up session
         ServerCore.onPlayerDisconnect(playerId);
-        
-        LOGGER.atInfo().log("Player " + playerRef.getUsername() + " disconnected - cleaned up state");
     }
 }

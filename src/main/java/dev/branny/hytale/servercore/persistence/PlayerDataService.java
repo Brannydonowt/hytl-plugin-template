@@ -107,6 +107,7 @@ public final class PlayerDataService {
 
     /**
      * Gets the PlayerDataComponent if it exists, without creating it.
+     * Checks the cache first for reliable access during world transfers.
      *
      * @param playerRef the player reference
      * @return the player data component, or null if not present
@@ -115,6 +116,13 @@ public final class PlayerDataService {
     public static PlayerDataComponent getIfPresent(@Nonnull PlayerRef playerRef) {
         if (componentType == null) {
             return null;
+        }
+
+        // Check cache first - most reliable during world transfers
+        UUID playerId = playerRef.getUuid();
+        PlayerDataComponent cached = componentCache.get(playerId);
+        if (cached != null) {
+            return cached;
         }
 
         Ref<EntityStore> ref = playerRef.getReference();
@@ -248,28 +256,12 @@ public final class PlayerDataService {
                 GlobalPlayerData global = data.getGlobalData();
                 global.recordFirstJoinIfNeeded();
                 global.updateLastSeen();
-                LOGGER.atInfo().log("[PlayerData] Initialized and cached for " + username + " (uuid=" + playerId + ")");
+                LOGGER.atInfo().log("[PlayerData] Initialized for " + username);
             } else {
                 LOGGER.atSevere().log("[PlayerData] INIT FAILED for " + username + " - ensureAndGetComponent returned null");
             }
         } catch (Exception e) {
             LOGGER.atSevere().log("[PlayerData] INIT FAILED for " + username + " - " + e.getClass().getSimpleName() + ": " + e.getMessage());
-        }
-    }
-
-    /**
-     * Called when a player connects to initialize their data.
-     * Records first join timestamp if needed and updates last seen.
-     *
-     * @param playerRef the player reference
-     */
-    public static void onPlayerConnect(@Nonnull PlayerRef playerRef) {
-        PlayerDataComponent data = get(playerRef);
-        if (data != null) {
-            GlobalPlayerData global = data.getGlobalData();
-            global.recordFirstJoinIfNeeded();
-            global.updateLastSeen();
-            LOGGER.atInfo().log("Initialized player data for " + playerRef.getUsername());
         }
     }
 
@@ -287,7 +279,6 @@ public final class PlayerDataService {
         if (data != null) {
             data.getGlobalData().updateLastSeen();
             data.markGamemodeDataChanged(); // Ensure any pending changes are serialized
-            LOGGER.atInfo().log("Updated last seen for " + playerRef.getUsername());
         }
         
         // Clean up cache - the Holder will persist the data

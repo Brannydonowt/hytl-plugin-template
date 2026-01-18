@@ -58,8 +58,6 @@ public final class GamemodeTransitionService {
             @Nonnull PlayerRef playerRef,
             @Nonnull String gamemodeId) {
 
-        LOGGER.atInfo().log("[Transition] joinGamemode called for " + playerRef.getUsername() + " -> " + gamemodeId);
-
         // Validate the transition
         TransitionResult validation = validateTransition(playerRef, gamemodeId);
         if (!validation.success()) {
@@ -152,7 +150,6 @@ public final class GamemodeTransitionService {
      */
     @Nonnull
     public static CompletableFuture<TransitionResult> returnToLobby(@Nonnull PlayerRef playerRef) {
-        LOGGER.atInfo().log("[Transition] returnToLobby called for " + playerRef.getUsername());
 
         // Basic validation
         if (!playerRef.getPacketHandler().stillActive()) {
@@ -301,14 +298,10 @@ public final class GamemodeTransitionService {
         world.execute(() -> {
             try {
                 // Save inventory from previous gamemode if applicable
-                // Use the captured ref to avoid stale lookups
                 if (previousGamemodeId != null) {
                     Gamemode prevGamemode = GamemodeRegistry.get(previousGamemodeId);
                     if (prevGamemode != null && prevGamemode.hasPersistentInventory()) {
-                        LOGGER.atInfo().log("[Transition] Saving inventory for " + playerRef.getUsername() + " from " + previousGamemodeId);
                         GamemodeInventoryManager.saveCurrentInventory(playerRef, previousGamemodeId, capturedRef);
-                    } else {
-                        LOGGER.atInfo().log("[Transition] Skipping inventory save for " + playerRef.getUsername() + " - " + previousGamemodeId + " is not persistent");
                     }
                 }
 
@@ -347,14 +340,10 @@ public final class GamemodeTransitionService {
         world.execute(() -> {
             try {
                 // Save inventory if leaving a persistent gamemode
-                // Use the captured ref to avoid stale lookups
                 if (currentGamemodeId != null) {
                     Gamemode gamemode = GamemodeRegistry.get(currentGamemodeId);
                     if (gamemode != null && gamemode.hasPersistentInventory()) {
-                        LOGGER.atInfo().log("[Transition] Saving inventory for " + playerRef.getUsername() + " from " + currentGamemodeId + " before lobby");
                         GamemodeInventoryManager.saveCurrentInventory(playerRef, currentGamemodeId, capturedRef);
-                    } else {
-                        LOGGER.atInfo().log("[Transition] Skipping inventory save for " + playerRef.getUsername() + " - " + currentGamemodeId + " is not persistent");
                     }
                 }
 
@@ -413,7 +402,6 @@ public final class GamemodeTransitionService {
 
                         // Restore inventory if persistent gamemode
                         if (gamemode.hasPersistentInventory()) {
-                            LOGGER.atInfo().log("[Transition] Restoring inventory for " + playerRef.getUsername() + " in " + gamemode.getId());
                             GamemodeInventoryManager.restoreInventory(playerRef, gamemode.getId());
                         }
                     }

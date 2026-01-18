@@ -10,14 +10,11 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 
-import dev.branny.hytale.gamemodes.Gamemode;
 import dev.branny.hytale.pvptools.loadout.Loadout;
 import dev.branny.hytale.pvptools.loadout.LoadoutItem;
 import dev.branny.hytale.pvptools.loadout.LoadoutService;
-import dev.branny.hytale.servercore.player.PlayerSession;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -101,8 +98,6 @@ public final class GamemodeInventoryManager {
             gamemodeData.saveInventory(capturedLoadout, storageItems);
             gamemodeData.updateLastPlayed();
             component.markGamemodeDataChanged();
-
-            LOGGER.atInfo().log("Saved inventory for " + playerRef.getUsername() + " in gamemode: " + gamemodeId);
             return true;
 
         } catch (Exception e) {
@@ -156,7 +151,6 @@ public final class GamemodeInventoryManager {
         // Get gamemode data (don't create if not present)
         GamemodePlayerData gamemodeData = PlayerDataService.getGamemodeDataIfPresent(playerRef, gamemodeId);
         if (gamemodeData == null || !gamemodeData.hasInventory()) {
-            LOGGER.atInfo().log("No saved inventory to restore for " + playerRef.getUsername() + " in gamemode: " + gamemodeId);
             return false;
         }
 
@@ -183,7 +177,6 @@ public final class GamemodeInventoryManager {
             if (component != null) {
                 component.markGamemodeDataChanged();
             }
-            LOGGER.atInfo().log("Restored inventory for " + playerRef.getUsername() + " from gamemode: " + gamemodeId);
             return true;
 
         } catch (Exception e) {
@@ -235,7 +228,6 @@ public final class GamemodeInventoryManager {
             Player player = ref.getStore().getComponent(ref, Player.getComponentType());
             if (player != null) {
                 player.getInventory().clear();
-                LOGGER.atInfo().log("Cleared inventory for " + playerRef.getUsername());
                 return true;
             }
         } catch (Exception e) {
@@ -253,131 +245,6 @@ public final class GamemodeInventoryManager {
     @Nonnull
     public static CompletableFuture<Void> clearInventoryAsync(@Nonnull PlayerRef playerRef) {
         return LoadoutService.clearLoadoutAsync(playerRef);
-    }
-
-    // ==================== Gamemode Transition Helpers ====================
-
-    /**
-     * Prepares a player for entering a new gamemode.
-     * Handles saving previous inventory, clearing, and optionally applying loadout/restoring.
-     *
-     * @param playerRef the player reference
-     * @param newGamemode the gamemode being entered
-     * @param previousGamemodeId the gamemode being left (null if from lobby)
-     * @return true if preparation was successful
-     */
-    public static boolean prepareForGamemode(
-            @Nonnull PlayerRef playerRef,
-            @Nonnull Gamemode newGamemode,
-            @Nullable String previousGamemodeId) {
-
-        // Step 1: Save current inventory to previous gamemode if applicable
-        if (previousGamemodeId != null) {
-            PlayerSession session = PlayerSession.get(playerRef.getUuid());
-            if (session != null && session.getCurrentGamemode() != null) {
-                saveCurrentInventory(playerRef, previousGamemodeId);
-            }
-        }
-
-        // Step 2: Clear current inventory
-        clearInventory(playerRef);
-
-        // Step 3: Set up inventory for new gamemode
-        Loadout defaultLoadout = newGamemode.getDefaultLoadout();
-        if (defaultLoadout != null) {
-            // PvP mode: Apply the gamemode's loadout
-            Ref<EntityStore> ref = playerRef.getReference();
-            if (ref != null && ref.isValid()) {
-                Player player = ref.getStore().getComponent(ref, Player.getComponentType());
-                if (player != null) {
-                    LoadoutService.applyLoadout(player, defaultLoadout);
-                }
-            }
-        } else if (newGamemode.hasPersistentInventory()) {
-            // Persistent mode: Restore saved inventory
-            restoreInventory(playerRef, newGamemode.getId());
-        }
-        // Otherwise: Leave inventory empty (e.g., lobby)
-
-        LOGGER.atInfo().log("Prepared " + playerRef.getUsername() + " for gamemode: " + newGamemode.getId());
-        return true;
-    }
-
-    /**
-     * Prepares a player for entering a new gamemode asynchronously.
-     *
-     * @param playerRef the player reference
-     * @param newGamemode the gamemode being entered
-     * @param previousGamemodeId the gamemode being left (null if from lobby)
-     * @return CompletableFuture that completes when preparation is done
-     */
-    @Nonnull
-    public static CompletableFuture<Boolean> prepareForGamemodeAsync(
-            @Nonnull PlayerRef playerRef,
-            @Nonnull Gamemode newGamemode,
-            @Nullable String previousGamemodeId) {
-
-        Ref<EntityStore> ref = playerRef.getReference();
-        if (ref == null || !ref.isValid()) {
-            return CompletableFuture.completedFuture(false);
-        }
-
-        World world = ((EntityStore) ref.getStore().getExternalData()).getWorld();
-        if (world == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-
-        CompletableFuture<Boolean> result = new CompletableFuture<>();
-        world.execute(() -> result.complete(prepareForGamemode(playerRef, newGamemode, previousGamemodeId)));
-        return result;
-    }
-
-    /**
-     * Prepares a player for returning to the lobby.
-     * Saves their current gamemode inventory and clears it.
-     *
-     * @param playerRef the player reference
-     * @param currentGamemodeId the gamemode being left
-     * @return true if preparation was successful
-     */
-    public static boolean prepareForLobby(@Nonnull PlayerRef playerRef, @Nullable String currentGamemodeId) {
-        // Save current inventory if leaving a persistent gamemode
-        if (currentGamemodeId != null) {
-            saveCurrentInventory(playerRef, currentGamemodeId);
-        }
-
-        // Clear inventory for lobby
-        clearInventory(playerRef);
-
-        LOGGER.atInfo().log("Prepared " + playerRef.getUsername() + " for lobby return");
-        return true;
-    }
-
-    /**
-     * Prepares a player for returning to the lobby asynchronously.
-     *
-     * @param playerRef the player reference
-     * @param currentGamemodeId the gamemode being left
-     * @return CompletableFuture that completes when preparation is done
-     */
-    @Nonnull
-    public static CompletableFuture<Boolean> prepareForLobbyAsync(
-            @Nonnull PlayerRef playerRef,
-            @Nullable String currentGamemodeId) {
-
-        Ref<EntityStore> ref = playerRef.getReference();
-        if (ref == null || !ref.isValid()) {
-            return CompletableFuture.completedFuture(false);
-        }
-
-        World world = ((EntityStore) ref.getStore().getExternalData()).getWorld();
-        if (world == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-
-        CompletableFuture<Boolean> result = new CompletableFuture<>();
-        world.execute(() -> result.complete(prepareForLobby(playerRef, currentGamemodeId)));
-        return result;
     }
 
     // ==================== Storage Item Helpers ====================

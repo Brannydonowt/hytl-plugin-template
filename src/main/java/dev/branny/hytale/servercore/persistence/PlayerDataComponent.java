@@ -185,47 +185,21 @@ public class PlayerDataComponent implements Component<EntityStore> {
     }
 
     /**
-     * Serializes individual gamemode fields.
+     * Serializes individual gamemode fields using raw strings from GamemodePlayerData.
      * Format: "hotbar|armor|utility|storage|lastPlayed|totalPlay|stats"
+     * Uses the pre-serialized strings directly to avoid double-conversion.
      */
     @Nonnull
     private static String serializeGamemodeFields(@Nonnull GamemodePlayerData gd) {
-        // Access internal serialized data through reflection-free approach
-        // We store: hotbar|armor|utility|storage|lastPlayed|totalPlay|stats (using | as field separator)
         return String.join("|",
-            serializeItemList(gd.getHotbarItems()),
-            serializeItemList(gd.getArmorItems()),
-            serializeItemList(gd.getUtilityItems()),
-            serializeItemList(gd.getStorageItems()),
+            gd.getHotbarItemsRaw(),
+            gd.getArmorItemsRaw(),
+            gd.getUtilityItemsRaw(),
+            gd.getStorageItemsRaw(),
             String.valueOf(gd.getLastPlayedTimestamp()),
             String.valueOf(gd.getTotalPlayTimeSeconds()),
-            serializeStats(gd.getStats())
+            gd.getStatsRaw()
         );
-    }
-
-    @Nonnull
-    private static String serializeItemList(@Nonnull java.util.List<dev.branny.hytale.pvptools.loadout.LoadoutItem> items) {
-        if (items.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < items.size(); i++) {
-            if (i > 0) sb.append(",");
-            var item = items.get(i);
-            sb.append(item.itemId()).append(":").append(item.quantity()).append(":").append(item.slot());
-        }
-        return sb.toString();
-    }
-
-    @Nonnull
-    private static String serializeStats(@Nonnull Map<String, Integer> stats) {
-        if (stats.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder();
-        boolean first = true;
-        for (var entry : stats.entrySet()) {
-            if (!first) sb.append(",");
-            first = false;
-            sb.append(entry.getKey()).append("=").append(entry.getValue());
-        }
-        return sb.toString();
     }
 
     /**
@@ -251,7 +225,8 @@ public class PlayerDataComponent implements Component<EntityStore> {
     }
 
     /**
-     * Deserializes individual gamemode fields.
+     * Deserializes individual gamemode fields directly into raw string storage.
+     * This avoids double-conversion by setting the pre-serialized strings directly.
      */
     @Nonnull
     private static GamemodePlayerData deserializeGamemodeFields(@Nonnull String data) {
@@ -259,76 +234,20 @@ public class PlayerDataComponent implements Component<EntityStore> {
         String[] fields = data.split("\\|", -1); // -1 to keep empty strings
         
         if (fields.length >= 7) {
-            // Reconstruct through the public API by setting storage items and stats
-            var hotbar = deserializeItemList(fields[0]);
-            var armor = deserializeItemList(fields[1]);
-            var utility = deserializeItemList(fields[2]);
-            var storage = deserializeItemList(fields[3]);
-            
-            // Create a temporary loadout to save
-            if (!hotbar.isEmpty() || !armor.isEmpty() || !utility.isEmpty()) {
-                var builder = dev.branny.hytale.pvptools.loadout.Loadout.builder("temp");
-                for (var item : hotbar) {
-                    builder.hotbar(item.itemId(), item.quantity(), item.slot());
-                }
-                for (var item : armor) {
-                    builder.armor(item.itemId(), item.slot());
-                }
-                for (var item : utility) {
-                    builder.utility(item.itemId(), item.quantity(), item.slot());
-                }
-                gd.saveInventory(builder.build(), storage);
-            } else if (!storage.isEmpty()) {
-                gd.setStorageItems(storage);
-            }
+            // Set raw serialized strings directly - avoids double deserialization/serialization
+            gd.setHotbarItemsRaw(fields[0]);
+            gd.setArmorItemsRaw(fields[1]);
+            gd.setUtilityItemsRaw(fields[2]);
+            gd.setStorageItemsRaw(fields[3]);
             
             try {
                 gd.setLastPlayedTimestamp(Long.parseLong(fields[4]));
                 gd.setTotalPlayTimeSeconds(Long.parseLong(fields[5]));
             } catch (NumberFormatException ignored) {}
             
-            // Restore stats
-            var stats = deserializeStatsMap(fields[6]);
-            for (var entry : stats.entrySet()) {
-                gd.setStat(entry.getKey(), entry.getValue());
-            }
+            gd.setStatsRaw(fields[6]);
         }
         return gd;
-    }
-
-    @Nonnull
-    private static java.util.List<dev.branny.hytale.pvptools.loadout.LoadoutItem> deserializeItemList(@Nonnull String data) {
-        java.util.List<dev.branny.hytale.pvptools.loadout.LoadoutItem> items = new java.util.ArrayList<>();
-        if (data == null || data.isEmpty()) return items;
-        
-        String[] entries = data.split(",");
-        for (String entry : entries) {
-            String[] parts = entry.split(":");
-            if (parts.length >= 3) {
-                try {
-                    items.add(new dev.branny.hytale.pvptools.loadout.LoadoutItem(
-                        parts[0], Integer.parseInt(parts[1]), Integer.parseInt(parts[2])));
-                } catch (NumberFormatException ignored) {}
-            }
-        }
-        return items;
-    }
-
-    @Nonnull
-    private static Map<String, Integer> deserializeStatsMap(@Nonnull String data) {
-        Map<String, Integer> stats = new HashMap<>();
-        if (data == null || data.isEmpty()) return stats;
-        
-        String[] entries = data.split(",");
-        for (String entry : entries) {
-            String[] parts = entry.split("=");
-            if (parts.length == 2) {
-                try {
-                    stats.put(parts[0], Integer.parseInt(parts[1]));
-                } catch (NumberFormatException ignored) {}
-            }
-        }
-        return stats;
     }
 
     // ==================== Component Interface ====================

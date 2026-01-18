@@ -1,9 +1,5 @@
 package dev.branny.hytale.servercore.persistence;
 
-import com.hypixel.hytale.codec.Codec;
-import com.hypixel.hytale.codec.KeyedCodec;
-import com.hypixel.hytale.codec.builder.BuilderCodec;
-
 import dev.branny.hytale.pvptools.loadout.Loadout;
 import dev.branny.hytale.pvptools.loadout.LoadoutItem;
 
@@ -18,8 +14,10 @@ import java.util.Map;
  * Per-gamemode player data that persists between sessions.
  * Stores saved inventory, gamemode-specific stats, and play history.
  * 
- * Uses simple string serialization for inventory items due to Hytale codec limitations.
+ * Uses simple string serialization for inventory items.
  * Format: "itemId:quantity:slot;itemId:quantity:slot;..."
+ * 
+ * Serialization is handled by PlayerDataComponent which aggregates all gamemode data.
  */
 public class GamemodePlayerData {
 
@@ -27,33 +25,6 @@ public class GamemodePlayerData {
     private static final String FIELD_DELIMITER = ":";
     private static final String STAT_DELIMITER = ";";
     private static final String STAT_FIELD_DELIMITER = "=";
-
-    public static final BuilderCodec<GamemodePlayerData> CODEC = BuilderCodec.builder(
-            GamemodePlayerData.class,
-            GamemodePlayerData::new
-        )
-        .addField(new KeyedCodec<>("HotbarItemsData", Codec.STRING),
-            (data, value) -> data.hotbarItemsData = value,
-            data -> data.hotbarItemsData)
-        .addField(new KeyedCodec<>("ArmorItemsData", Codec.STRING),
-            (data, value) -> data.armorItemsData = value,
-            data -> data.armorItemsData)
-        .addField(new KeyedCodec<>("UtilityItemsData", Codec.STRING),
-            (data, value) -> data.utilityItemsData = value,
-            data -> data.utilityItemsData)
-        .addField(new KeyedCodec<>("StorageItemsData", Codec.STRING),
-            (data, value) -> data.storageItemsData = value,
-            data -> data.storageItemsData)
-        .addField(new KeyedCodec<>("LastPlayedTimestamp", Codec.LONG),
-            (data, value) -> data.lastPlayedTimestamp = value,
-            data -> data.lastPlayedTimestamp)
-        .addField(new KeyedCodec<>("TotalPlayTimeSeconds", Codec.LONG),
-            (data, value) -> data.totalPlayTimeSeconds = value,
-            data -> data.totalPlayTimeSeconds)
-        .addField(new KeyedCodec<>("StatsData", Codec.STRING),
-            (data, value) -> data.statsData = value,
-            data -> data.statsData)
-        .build();
 
     // Serialized inventory data (format: "itemId:quantity:slot;...")
     private String hotbarItemsData;
@@ -222,6 +193,54 @@ public class GamemodePlayerData {
 
     public void addPlayTime(long seconds) {
         this.totalPlayTimeSeconds += seconds;
+    }
+
+    // ==================== Raw Serialized Data Access ====================
+    // Used by PlayerDataComponent for efficient serialization without double-conversion
+
+    @Nonnull
+    String getHotbarItemsRaw() {
+        return hotbarItemsData;
+    }
+
+    void setHotbarItemsRaw(@Nonnull String data) {
+        this.hotbarItemsData = data;
+    }
+
+    @Nonnull
+    String getArmorItemsRaw() {
+        return armorItemsData;
+    }
+
+    void setArmorItemsRaw(@Nonnull String data) {
+        this.armorItemsData = data;
+    }
+
+    @Nonnull
+    String getUtilityItemsRaw() {
+        return utilityItemsData;
+    }
+
+    void setUtilityItemsRaw(@Nonnull String data) {
+        this.utilityItemsData = data;
+    }
+
+    @Nonnull
+    String getStorageItemsRaw() {
+        return storageItemsData;
+    }
+
+    void setStorageItemsRaw(@Nonnull String data) {
+        this.storageItemsData = data;
+    }
+
+    @Nonnull
+    String getStatsRaw() {
+        return statsData;
+    }
+
+    void setStatsRaw(@Nonnull String data) {
+        this.statsData = data;
     }
 
     // ==================== Serialization Helpers ====================

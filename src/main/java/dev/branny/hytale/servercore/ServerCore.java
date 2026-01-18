@@ -58,35 +58,11 @@ public final class ServerCore {
     }
 
     /**
-     * Called when a player connects to the server.
-     *
-     * @param playerId the player's UUID
-     * @param username the player's username
-     * @return the created session
-     */
-    @Nonnull
-    public static PlayerSession onPlayerConnect(@Nonnull UUID playerId, @Nonnull String username) {
-        PlayerSession session = new PlayerSession(playerId, username);
-        return session;
-    }
-
-    /**
      * Called when a player disconnects from the server.
      *
      * @param playerId the player's UUID
      */
     public static void onPlayerDisconnect(@Nonnull UUID playerId) {
-        PlayerSession session = PlayerSession.get(playerId);
-        if (session != null) {
-            // Clean up any queue or match state
-            if (session.isQueued()) {
-                LOGGER.atInfo().log("Player " + session.getUsername() + " disconnected while in queue");
-            }
-            if (session.isInMatch()) {
-                LOGGER.atInfo().log("Player " + session.getUsername() + " disconnected while in match");
-                // Match cleanup will be handled by the match system
-            }
-        }
         PlayerSession.remove(playerId);
     }
 
