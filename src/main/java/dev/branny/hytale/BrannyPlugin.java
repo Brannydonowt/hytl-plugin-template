@@ -19,6 +19,7 @@ import dev.branny.hytale.pvptools.combat.CombatListener;
 import dev.branny.hytale.pvptools.loadout.LoadoutRegistry;
 import dev.branny.hytale.pvptools.match.MatchManager;
 import dev.branny.hytale.servercore.ServerCore;
+import dev.branny.hytale.servercore.gamemode.GamemodeTransitionService;
 import dev.branny.hytale.servercore.lobby.LobbyCommands;
 import dev.branny.hytale.servercore.lobby.LobbyConfig;
 import dev.branny.hytale.servercore.lobby.LobbyManager;
@@ -146,6 +147,7 @@ public class BrannyPlugin extends JavaPlugin {
     /**
      * Handles player ready events.
      * On initial join, routes the player to the lobby.
+     * If player spawned into a gamemode world, saves their inventory first.
      */
     private void onPlayerReady(PlayerReadyEvent event) {
         Player player = event.getPlayer();
@@ -159,7 +161,7 @@ public class BrannyPlugin extends JavaPlugin {
         // Create session
         @SuppressWarnings("deprecation")
         PlayerRef playerRef = player.getPlayerRef();
-        PlayerSession.getOrCreate(playerRef);
+        PlayerSession session = PlayerSession.getOrCreate(playerRef);
 
         // Check if we've already handled this player's initial join
         if (!initialJoinHandled.add(playerUuid)) {
@@ -179,6 +181,14 @@ public class BrannyPlugin extends JavaPlugin {
             return;
         }
 
+        // Check if player spawned into a gamemode world (e.g., rejoining after disconnect)
+        // If so, we need to track this and save their inventory before moving to lobby
+        Gamemode spawnedGamemode = GamemodeRegistry.getByWorldName(currentWorld.getName());
+        if (spawnedGamemode != null) {
+            // Player spawned into a gamemode world - set session state so returnToLobby knows about it
+            session.setCurrentGamemode(spawnedGamemode.getId());
+        }
+
         // Transfer to lobby with short delay for client fade
         CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(() -> {
             World worldAfterDelay = WorldTransferService.getCurrentWorld(playerRef);
@@ -191,18 +201,12 @@ public class BrannyPlugin extends JavaPlugin {
                 return;
             }
 
-            worldAfterDelay.execute(() -> {
-                WorldTransferService.transferWithTitle(
-                    playerRef,
-                    LobbyConfig.LOBBY_WORLD_NAME,
-                    LobbyConfig.getLobbySpawn(),
-                    "Welcome!",
-                    "Use /lobby games to see available modes!"
-                ).whenComplete((transferred, error) -> {
-                    if (error != null) {
-                        LOGGER.atWarning().log("Failed to transfer to lobby: " + error.getMessage());
-                    }
-                });
+            // Use GamemodeTransitionService.returnToLobby() to properly save inventory
+            // This handles the case where player spawned into a persistent gamemode world
+            GamemodeTransitionService.returnToLobby(playerRef).whenComplete((result, error) -> {
+                if (error != null) {
+                    LOGGER.atWarning().log("Failed to transfer to lobby: " + error.getMessage());
+                }
             });
         });
     }

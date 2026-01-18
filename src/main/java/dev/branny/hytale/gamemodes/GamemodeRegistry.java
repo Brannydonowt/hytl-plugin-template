@@ -146,6 +146,22 @@ public final class GamemodeRegistry {
         return gamemodes.size();
     }
 
+    /**
+     * Finds a gamemode by its world name.
+     *
+     * @param worldName the world name to search for
+     * @return the gamemode that uses this world, or null if none found
+     */
+    @Nullable
+    public static Gamemode getByWorldName(@Nonnull String worldName) {
+        for (Gamemode gamemode : gamemodes.values()) {
+            if (worldName.equals(gamemode.getWorldName())) {
+                return gamemode;
+            }
+        }
+        return null;
+    }
+
     // ==================== Lifecycle ====================
 
     /**
