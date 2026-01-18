@@ -11,7 +11,7 @@ import dev.branny.hytale.pvptools.match.Match;
 import dev.branny.hytale.pvptools.match.MatchManager;
 import dev.branny.hytale.pvptools.match.MatchParticipant;
 import dev.branny.hytale.pvptools.match.MatchResult;
-import dev.branny.hytale.servercore.lobby.LobbyManager;
+import dev.branny.hytale.servercore.gamemode.GamemodeTransitionService;
 import dev.branny.hytale.servercore.world.WorldTransferService;
 
 import javax.annotation.Nonnull;
@@ -81,16 +81,7 @@ public class ArenaMatch extends Match {
         CompletableFuture.delayedExecutor(ArenaConfig.END_DELAY_SECONDS, TimeUnit.SECONDS)
             .execute(() -> {
                 for (MatchParticipant participant : result.getParticipants()) {
-                    // Clear loadout
-                    LoadoutService.clearLoadoutAsync(participant.getPlayerRef());
-                    
-                    // Transfer to lobby
-                    LobbyManager.transferToLobby(participant.getPlayerRef())
-                        .thenAccept(p -> {
-                            if (p != null) {
-                                LobbyManager.onPlayerReturnToLobby(p);
-                            }
-                        });
+                    GamemodeTransitionService.returnToLobby(participant.getPlayerRef());
                 }
                 
                 // Unregister match

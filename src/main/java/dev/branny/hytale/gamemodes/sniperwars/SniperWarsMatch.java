@@ -11,7 +11,7 @@ import dev.branny.hytale.pvptools.match.Match;
 import dev.branny.hytale.pvptools.match.MatchManager;
 import dev.branny.hytale.pvptools.match.MatchParticipant;
 import dev.branny.hytale.pvptools.match.MatchResult;
-import dev.branny.hytale.servercore.lobby.LobbyManager;
+import dev.branny.hytale.servercore.gamemode.GamemodeTransitionService;
 import dev.branny.hytale.servercore.world.WorldTransferService;
 
 import javax.annotation.Nonnull;
@@ -115,13 +115,7 @@ public class SniperWarsMatch extends Match {
         CompletableFuture.delayedExecutor(SniperWarsConfig.END_DELAY_SECONDS, TimeUnit.SECONDS)
             .execute(() -> {
                 for (MatchParticipant participant : result.getParticipants()) {
-                    LoadoutService.clearLoadoutAsync(participant.getPlayerRef());
-                    LobbyManager.transferToLobby(participant.getPlayerRef())
-                        .thenAccept(p -> {
-                            if (p != null) {
-                                LobbyManager.onPlayerReturnToLobby(p);
-                            }
-                        });
+                    GamemodeTransitionService.returnToLobby(participant.getPlayerRef());
                 }
                 MatchManager.unregisterMatch(getMatchId());
             });

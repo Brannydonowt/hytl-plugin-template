@@ -10,7 +10,7 @@ import com.hypixel.hytale.server.core.universe.PlayerRef;
 
 import dev.branny.hytale.gamemodes.Gamemode;
 import dev.branny.hytale.gamemodes.GamemodeRegistry;
-import dev.branny.hytale.pvptools.match.MatchManager;
+import dev.branny.hytale.servercore.gamemode.GamemodeTransitionService;
 
 import javax.annotation.Nonnull;
 
@@ -50,15 +50,16 @@ class ReturnToLobbyCommand extends CommandBase {
         Player player = (Player) ctx.sender();
         PlayerRef playerRef = player.getPlayerRef();
 
-        // Check if in a match
-        if (MatchManager.isInMatch(player.getUuid())) {
-            ctx.sendMessage(Message.raw(
-                "You cannot return to lobby while in a match. Use the forfeit command to leave."));
-            return;
-        }
-
         ctx.sendMessage(Message.raw("Returning to lobby..."));
-        LobbyManager.transferToLobby(playerRef);
+
+        GamemodeTransitionService.returnToLobby(playerRef)
+            .whenComplete((result, error) -> {
+                if (error != null) {
+                    playerRef.sendMessage(Message.raw("Failed to return to lobby: " + error.getMessage()));
+                } else if (!result.success()) {
+                    playerRef.sendMessage(Message.raw(result.message()));
+                }
+            });
     }
 }
 
@@ -75,14 +76,21 @@ class GamesCommand extends CommandBase {
     @Override
     protected void executeSync(@Nonnull CommandContext ctx) {
         ctx.sendMessage(Message.raw("=== Available Gamemodes ==="));
+        ctx.sendMessage(Message.raw(""));
         
-        for (Gamemode gamemode : GamemodeRegistry.getQueueable()) {
-            ctx.sendMessage(Message.raw(
-                "- " + gamemode.getDisplayName() + " (/" + gamemode.getId() + " queue)"));
-            ctx.sendMessage(Message.raw(
-                "  " + gamemode.getDescription()));
-            ctx.sendMessage(Message.raw(
-                "  Players: " + gamemode.getMinPlayers() + "-" + gamemode.getMaxPlayers()));
+        for (Gamemode gamemode : GamemodeRegistry.getEnabled()) {
+            ctx.sendMessage(Message.raw("- " + gamemode.getDisplayName()));
+            ctx.sendMessage(Message.raw("  " + gamemode.getDescription()));
+            
+            if (gamemode.canQueue()) {
+                // Match-based gamemode - show queue command
+                ctx.sendMessage(Message.raw("  Command: /" + gamemode.getId() + " queue"));
+                ctx.sendMessage(Message.raw("  Players: " + gamemode.getMinPlayers() + "-" + gamemode.getMaxPlayers()));
+            } else {
+                // Direct-join gamemode (like Survival)
+                ctx.sendMessage(Message.raw("  Command: /" + gamemode.getId() + " join"));
+            }
+            ctx.sendMessage(Message.raw(""));
         }
     }
 }

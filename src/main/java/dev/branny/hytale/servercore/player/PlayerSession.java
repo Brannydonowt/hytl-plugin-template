@@ -165,6 +165,24 @@ public class PlayerSession {
     }
 
     /**
+     * Sets the player's current gamemode (for non-match gamemodes like Survival).
+     *
+     * @param gamemodeId the gamemode ID
+     */
+    public void setCurrentGamemode(@Nonnull String gamemodeId) {
+        this.currentGamemode = gamemodeId;
+        this.isInLobby = false;
+    }
+
+    /**
+     * Clears the player's current gamemode (returned to lobby).
+     */
+    public void clearCurrentGamemode() {
+        this.currentGamemode = null;
+        this.isInLobby = true;
+    }
+
+    /**
      * Checks if the player is in a match.
      *
      * @return true if in a match

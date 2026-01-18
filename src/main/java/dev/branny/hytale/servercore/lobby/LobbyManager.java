@@ -348,17 +348,4 @@ public final class LobbyManager {
         );
     }
 
-    /**
-     * Called when a player returns to the lobby (e.g., after a match).
-     *
-     * @param playerRef the player
-     */
-    public static void onPlayerReturnToLobby(@Nonnull PlayerRef playerRef) {
-        PlayerSession session = PlayerSession.get(playerRef.getUuid());
-        if (session != null) {
-            session.setInLobby(true);
-            session.clearCurrentMatch();
-        }
-        LOGGER.atInfo().log(playerRef.getUsername() + " returned to lobby");
-    }
 }

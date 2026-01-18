@@ -2,6 +2,7 @@ package dev.branny.hytale;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.event.events.player.PlayerConnectEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerDisconnectEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerReadyEvent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
@@ -9,9 +10,11 @@ import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 
+import dev.branny.hytale.gamemodes.Gamemode;
 import dev.branny.hytale.gamemodes.GamemodeRegistry;
 import dev.branny.hytale.gamemodes.arena.ArenaGamemode;
 import dev.branny.hytale.gamemodes.sniperwars.SniperWarsGamemode;
+import dev.branny.hytale.gamemodes.survival.SurvivalGamemode;
 import dev.branny.hytale.pvptools.combat.CombatListener;
 import dev.branny.hytale.pvptools.loadout.LoadoutRegistry;
 import dev.branny.hytale.pvptools.match.MatchManager;
@@ -19,6 +22,9 @@ import dev.branny.hytale.servercore.ServerCore;
 import dev.branny.hytale.servercore.lobby.LobbyCommands;
 import dev.branny.hytale.servercore.lobby.LobbyConfig;
 import dev.branny.hytale.servercore.lobby.LobbyManager;
+import dev.branny.hytale.servercore.persistence.GamemodeInventoryManager;
+import dev.branny.hytale.servercore.persistence.PlayerDataComponent;
+import dev.branny.hytale.servercore.persistence.PlayerDataService;
 import dev.branny.hytale.servercore.player.PlayerSession;
 import dev.branny.hytale.servercore.world.WorldTransferService;
 
@@ -59,6 +65,14 @@ public class BrannyPlugin extends JavaPlugin {
         // Initialize server core
         ServerCore.initialize();
         
+        // Register player data component for persistence
+        var playerDataComponentType = getEntityStoreRegistry().registerComponent(
+            PlayerDataComponent.class,
+            PlayerDataComponent::new
+        );
+        PlayerDataService.setComponentType(playerDataComponentType);
+        LOGGER.atInfo().log("Registered PlayerDataComponent for persistence");
+        
         // Register default loadouts
         LoadoutRegistry.registerDefaults();
         LOGGER.atInfo().log("Registered " + LoadoutRegistry.getLoadoutCount() + " loadouts");
@@ -75,6 +89,7 @@ public class BrannyPlugin extends JavaPlugin {
         // Register gamemodes
         GamemodeRegistry.register(new ArenaGamemode(), getCommandRegistry());
         GamemodeRegistry.register(new SniperWarsGamemode(), getCommandRegistry());
+        GamemodeRegistry.register(new SurvivalGamemode(), getCommandRegistry());
         LOGGER.atInfo().log("Registered " + GamemodeRegistry.getCount() + " gamemodes");
         
         // ==================== Global Commands ====================
@@ -93,6 +108,8 @@ public class BrannyPlugin extends JavaPlugin {
         LobbyManager.initialize();
         
         // Register event listeners
+        // PlayerConnectEvent fires before player enters any world - use Holder to init data
+        getEventRegistry().register(PlayerConnectEvent.class, this::onPlayerConnect);
         getEventRegistry().registerGlobal(PlayerReadyEvent.class, this::onPlayerReady);
         getEventRegistry().register(PlayerDisconnectEvent.class, this::onPlayerDisconnect);
         
@@ -115,6 +132,18 @@ public class BrannyPlugin extends JavaPlugin {
     // ==================== Event Handlers ====================
 
     /**
+     * Handles player connect events (before entering any world).
+     * Initializes persistent data using the Holder so it survives world transfers.
+     */
+    private void onPlayerConnect(PlayerConnectEvent event) {
+        PlayerRef playerRef = event.getPlayerRef();
+        // Initialize PlayerDataComponent via Holder - this is the earliest reliable point
+        // and ensures the component exists before any world transfers
+        // Also caches it by UUID for reliable access when player is in a world
+        PlayerDataService.initFromHolder(event.getHolder(), playerRef.getUuid(), playerRef.getUsername());
+    }
+
+    /**
      * Handles player ready events.
      * On initial join, routes the player to the lobby.
      */
@@ -131,6 +160,9 @@ public class BrannyPlugin extends JavaPlugin {
         @SuppressWarnings("deprecation")
         PlayerRef playerRef = player.getPlayerRef();
         PlayerSession.getOrCreate(playerRef);
+        
+        // Initialize persistent player data
+        PlayerDataService.onPlayerConnect(playerRef);
 
         // Check if we've already handled this player's initial join
         if (!initialJoinHandled.add(playerUuid)) {
@@ -153,7 +185,7 @@ public class BrannyPlugin extends JavaPlugin {
         }
 
         // Transfer to lobby with short delay for client fade
-        CompletableFuture.delayedExecutor(500, TimeUnit.MILLISECONDS).execute(() -> {
+        CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(() -> {
             World worldAfterDelay = WorldTransferService.getCurrentWorld(playerRef);
             if (worldAfterDelay == null) {
                 return;
@@ -170,7 +202,7 @@ public class BrannyPlugin extends JavaPlugin {
                     LobbyConfig.LOBBY_WORLD_NAME,
                     LobbyConfig.getLobbySpawn(),
                     "Welcome!",
-                    "Use /arena queue or /sniperwars queue to play!"
+                    "Use /lobby games to see available modes!"
                 ).whenComplete((transferred, error) -> {
                     if (error != null) {
                         LOGGER.atWarning().log("Failed to transfer to lobby: " + error.getMessage());
@@ -182,7 +214,7 @@ public class BrannyPlugin extends JavaPlugin {
 
     /**
      * Handles player disconnect events.
-     * Cleans up session and queue state.
+     * Cleans up session and queue state, saves persistent inventory.
      */
     private void onPlayerDisconnect(PlayerDisconnectEvent event) {
         PlayerRef playerRef = event.getPlayerRef();
@@ -192,6 +224,19 @@ public class BrannyPlugin extends JavaPlugin {
 
         UUID playerId = playerRef.getUuid();
         
+        // Save inventory if in a persistent gamemode (belt-and-suspenders with transition save)
+        PlayerSession session = PlayerSession.get(playerId);
+        if (session != null) {
+            String currentGamemodeId = session.getCurrentGamemode();
+            if (currentGamemodeId != null) {
+                Gamemode gamemode = GamemodeRegistry.get(currentGamemodeId);
+                if (gamemode != null && gamemode.hasPersistentInventory()) {
+                    GamemodeInventoryManager.saveCurrentInventory(playerRef, currentGamemodeId);
+                    LOGGER.atInfo().log("Saved persistent inventory on disconnect for " + playerRef.getUsername());
+                }
+            }
+        }
+        
         // Clean up tracking state
         initialJoinHandled.remove(playerId);
         
@@ -200,6 +245,9 @@ public class BrannyPlugin extends JavaPlugin {
         
         // Remove from match if in one
         MatchManager.removePlayerFromMatch(playerId);
+        
+        // Update persistent player data
+        PlayerDataService.onPlayerDisconnect(playerRef);
         
         // Clean up session
         ServerCore.onPlayerDisconnect(playerId);

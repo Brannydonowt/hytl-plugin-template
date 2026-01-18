@@ -1,5 +1,7 @@
 package dev.branny.hytale.gamemodes;
 
+import com.hypixel.hytale.math.vector.Transform;
+import com.hypixel.hytale.protocol.GameMode;
 import com.hypixel.hytale.server.core.command.system.CommandRegistry;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 
@@ -82,6 +84,38 @@ public interface Gamemode {
     Loadout getDefaultLoadout();
 
     /**
+     * Gets the Hytale GameMode (Adventure/Creative) for this gamemode.
+     * This determines player abilities like block breaking, flying, etc.
+     * 
+     * Available modes:
+     * - Adventure (0): Standard mode with damage, survival mechanics
+     * - Creative (1): Unlimited resources, flying, no damage
+     * 
+     * Default is Adventure mode, which works well for PvP minigames
+     * where players should take damage but not access creative abilities.
+     *
+     * @return the Hytale GameMode to apply when players join this gamemode
+     */
+    @Nonnull
+    default GameMode getHytaleGameMode() {
+        return GameMode.Adventure;
+    }
+
+    /**
+     * Checks if this gamemode persists player inventory between sessions.
+     * When true, the inventory system will save/restore player inventory
+     * when entering and leaving this gamemode.
+     * 
+     * Default is false (minigames typically use loadouts instead).
+     * Override to return true for persistent modes like Survival.
+     *
+     * @return true if inventory should be persisted
+     */
+    default boolean hasPersistentInventory() {
+        return false;
+    }
+
+    /**
      * Registers commands for this gamemode.
      * Called during plugin initialization.
      *
@@ -123,5 +157,62 @@ public interface Gamemode {
      */
     default boolean canQueue() {
         return isEnabled();
+    }
+
+    // ==================== Lifecycle Hooks ====================
+
+    /**
+     * Called after a player successfully joins this gamemode.
+     * Override to perform custom logic when a player enters.
+     *
+     * @param player the player who joined
+     */
+    default void onPlayerJoin(@Nonnull PlayerRef player) {
+        // Override for custom join logic
+    }
+
+    /**
+     * Called before a player leaves this gamemode.
+     * Override to perform custom cleanup when a player exits.
+     *
+     * @param player the player who is leaving
+     */
+    default void onPlayerLeave(@Nonnull PlayerRef player) {
+        // Override for custom leave logic
+    }
+
+    // ==================== Spawn Configuration ====================
+
+    /**
+     * Gets the spawn location for this gamemode.
+     * Override to specify a custom spawn point.
+     *
+     * @return the spawn transform, or null to use world default
+     */
+    @Nullable
+    default Transform getSpawnTransform() {
+        return null;
+    }
+
+    /**
+     * Gets the title shown when a player joins this gamemode.
+     * Displayed as an EventTitle after transfer.
+     *
+     * @return the join title, or null to use display name
+     */
+    @Nullable
+    default String getJoinTitle() {
+        return getDisplayName();
+    }
+
+    /**
+     * Gets the subtitle shown when a player joins this gamemode.
+     * Displayed below the title after transfer.
+     *
+     * @return the join subtitle, or null for no subtitle
+     */
+    @Nullable
+    default String getJoinSubtitle() {
+        return null;
     }
 }

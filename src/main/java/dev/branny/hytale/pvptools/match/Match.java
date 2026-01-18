@@ -1,14 +1,21 @@
 package dev.branny.hytale.pvptools.match;
 
+import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.logger.HytaleLogger;
+import com.hypixel.hytale.protocol.GameMode;
 import com.hypixel.hytale.server.core.Message;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.util.EventTitleUtil;
 
+import dev.branny.hytale.gamemodes.Gamemode;
+import dev.branny.hytale.gamemodes.GamemodeRegistry;
 import dev.branny.hytale.pvptools.combat.EliminationEvent;
 import dev.branny.hytale.pvptools.loadout.Loadout;
 import dev.branny.hytale.pvptools.loadout.LoadoutService;
+import dev.branny.hytale.servercore.persistence.GamemodeInventoryManager;
 import dev.branny.hytale.servercore.player.PlayerSession;
 
 import javax.annotation.Nonnull;
@@ -109,10 +116,34 @@ public abstract class Match {
         state = MatchState.STARTING;
         startedAt = Instant.now();
 
-        // Apply loadouts to all participants
-        if (defaultLoadout != null) {
-            for (MatchParticipant participant : participants.values()) {
-                LoadoutService.applyLoadoutAsync(participant.getPlayerRef(), defaultLoadout);
+        // Get the gamemode for inventory preparation
+        Gamemode gamemode = GamemodeRegistry.get(gamemodeId);
+
+        // Prepare inventory for each participant (save previous, clear, apply loadout)
+        for (MatchParticipant participant : participants.values()) {
+            PlayerRef playerRef = participant.getPlayerRef();
+            PlayerSession session = PlayerSession.get(participant.getPlayerId());
+            
+            // Save current inventory to previous gamemode if applicable
+            String previousGamemode = session != null ? session.getCurrentGamemode() : null;
+            if (previousGamemode != null) {
+                GamemodeInventoryManager.saveCurrentInventory(playerRef, previousGamemode);
+            }
+            
+            // Clear inventory before applying loadout
+            GamemodeInventoryManager.clearInventory(playerRef);
+            
+            // Apply loadout if one is configured
+            if (defaultLoadout != null) {
+                LoadoutService.applyLoadoutAsync(playerRef, defaultLoadout);
+            } else if (gamemode != null && gamemode.hasPersistentInventory()) {
+                // Restore saved inventory for persistent gamemodes
+                GamemodeInventoryManager.restoreInventory(playerRef, gamemodeId);
+            }
+            
+            // Apply the Hytale GameMode for this gamemode
+            if (gamemode != null) {
+                applyHytaleGameMode(playerRef, gamemode.getHytaleGameMode());
             }
         }
 
@@ -152,13 +183,21 @@ public abstract class Match {
             .addParticipants(participants.values())
             .build();
 
-        // Clear player sessions
+        // Check if this is a persistent inventory gamemode
+        Gamemode gamemode = GamemodeRegistry.get(gamemodeId);
+        boolean persistentInventory = gamemode != null && gamemode.hasPersistentInventory();
+
+        // Clear player sessions and handle inventory
         for (MatchParticipant participant : participants.values()) {
             PlayerSession session = PlayerSession.get(participant.getPlayerId());
             if (session != null) {
                 session.clearCurrentMatch();
             }
-            // Clear loadouts
+            
+            // Save inventory if persistent gamemode, then clear
+            if (persistentInventory) {
+                GamemodeInventoryManager.saveCurrentInventory(participant.getPlayerRef(), gamemodeId);
+            }
             LoadoutService.clearLoadoutAsync(participant.getPlayerRef());
         }
 
@@ -178,11 +217,20 @@ public abstract class Match {
         state = MatchState.CANCELLED;
         endedAt = Instant.now();
 
-        // Clear player sessions
+        // Check if this is a persistent inventory gamemode
+        Gamemode gamemode = GamemodeRegistry.get(gamemodeId);
+        boolean persistentInventory = gamemode != null && gamemode.hasPersistentInventory();
+
+        // Clear player sessions and handle inventory
         for (MatchParticipant participant : participants.values()) {
             PlayerSession session = PlayerSession.get(participant.getPlayerId());
             if (session != null) {
                 session.clearCurrentMatch();
+            }
+            
+            // Save inventory if persistent gamemode, then clear
+            if (persistentInventory) {
+                GamemodeInventoryManager.saveCurrentInventory(participant.getPlayerRef(), gamemodeId);
             }
             LoadoutService.clearLoadoutAsync(participant.getPlayerRef());
         }
@@ -375,6 +423,41 @@ public abstract class Match {
 
     public boolean canStart() {
         return state == MatchState.WAITING && participants.size() >= minPlayers;
+    }
+
+    // ==================== Utility Methods ====================
+
+    /**
+     * Applies a Hytale GameMode to a player.
+     * This determines abilities like block breaking, flying, damage, etc.
+     *
+     * @param playerRef the player reference
+     * @param gameMode the Hytale GameMode to apply
+     */
+    protected void applyHytaleGameMode(@Nonnull PlayerRef playerRef, @Nonnull GameMode gameMode) {
+        Ref<EntityStore> ref = playerRef.getReference();
+        if (ref == null || !ref.isValid()) {
+            LOGGER.atWarning().log("Cannot apply GameMode - player not in world: " + playerRef.getUsername());
+            return;
+        }
+
+        try {
+            // Get the world for executing on the correct thread
+            World world = ((EntityStore) ref.getStore().getExternalData()).getWorld();
+            if (world == null) {
+                return;
+            }
+
+            world.execute(() -> {
+                Ref<EntityStore> currentRef = playerRef.getReference();
+                if (currentRef != null && currentRef.isValid()) {
+                    Player.setGameMode(currentRef, gameMode, currentRef.getStore());
+                    LOGGER.atInfo().log("Applied GameMode " + gameMode + " to " + playerRef.getUsername());
+                }
+            });
+        } catch (Exception e) {
+            LOGGER.atWarning().log("Failed to apply GameMode: " + e.getMessage());
+        }
     }
 
     @Override
